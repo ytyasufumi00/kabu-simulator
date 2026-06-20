@@ -36,6 +36,12 @@ pip install -r requirements.txt -r requirements-dev.txt
 pip install -e .
 df -h /
 
+echo "=== downloading existing champion state from ${GCS_BUCKET} ==="
+# 新しいVMはgit cloneしただけなのでrunsが空（runs/はgitignore対象）。
+# 既存のchampionと比較するため、GCS上の前回結果を学習前に復元する。
+mkdir -p runs
+gsutil -m rsync -r "${GCS_BUCKET}/runs/" runs/
+
 echo "=== running: ${TRAIN_CMD} ==="
 eval "${TRAIN_CMD}"
 TRAIN_EXIT_CODE=$?
