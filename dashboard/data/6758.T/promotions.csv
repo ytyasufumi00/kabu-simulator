@@ -1,2 +1,3 @@
 timestamp,variant_name,win_ratio,margin,promoted,reason
-2026-06-20T13:39:46,baseline,1.0,inf,True,既存championが存在しない
+2026-06-20T14:41:22,baseline,1.0,inf,True,既存championが存在しない
+2026-06-20T23:40:07,baseline,0.6666666666666666,0.7309813771902449,True,"win_ratio=0.67 (閾値0.60), margin=+0.7310 (閾値0.0500)"
