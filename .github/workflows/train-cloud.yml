@@ -39,6 +39,10 @@ jobs:
         name: Launch Spot training VM
         run: |
           INSTANCE_NAME="kabu-simulator-trainer-$(date +%s)"
+          # TRAIN_CMDはカンマ・引用符・&&等を含み得るため、--metadataのカンマ区切り
+          # パースとは衝突する。ファイル経由（--metadata-from-file）で渡して回避する。
+          printf '%s' "${{ inputs.train_command }}" > /tmp/train_cmd.txt
+          PROJECT_NUMBER=$(gcloud projects describe "${{ secrets.GCP_PROJECT_ID }}" --format='value(projectNumber)')
           gcloud compute instances create "$INSTANCE_NAME" \
             --project="${{ secrets.GCP_PROJECT_ID }}" \
             --zone=asia-northeast1-a \
@@ -51,8 +55,8 @@ jobs:
             --service-account="kabu-simulator-trainer@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
             --scopes=cloud-platform \
             --boot-disk-size=30GB \
-            --metadata-from-file=startup-script=training/startup-script.sh \
-            --metadata=REPO_URL=https://github.com/${{ github.repository }}.git,GCS_BUCKET=gs://kabu-simulator-runs-$(gcloud projects describe ${{ secrets.GCP_PROJECT_ID }} --format='value(projectNumber)'),TRAIN_CMD="${{ inputs.train_command }}",serial-port-logging-enable=true
+            --metadata-from-file=startup-script=training/startup-script.sh,TRAIN_CMD=/tmp/train_cmd.txt \
+            --metadata=REPO_URL=https://github.com/${{ github.repository }}.git,GCS_BUCKET=gs://kabu-simulator-runs-${PROJECT_NUMBER},serial-port-logging-enable=true
           echo "instance_name=$INSTANCE_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Show monitoring command
