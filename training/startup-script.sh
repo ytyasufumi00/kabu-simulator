@@ -28,8 +28,13 @@ echo "=== installing dependencies ==="
 python3 -m venv .venv
 . .venv/bin/activate
 pip install --upgrade pip
+# requirements.txtのtorch>=2.4は無指定だとCUDA同梱版（数GB）を引っ張り、
+# ディスク容量を圧迫するため、CPU専用版を先にインストールしておく
+# （要求バージョンを満たすのでrequirements.txt側では再インストールされない）
+pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements.txt -r requirements-dev.txt
 pip install -e .
+df -h /
 
 echo "=== running: ${TRAIN_CMD} ==="
 eval "${TRAIN_CMD}"

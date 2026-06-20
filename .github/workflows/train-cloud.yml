@@ -50,8 +50,9 @@ jobs:
             --max-run-duration="${{ inputs.max_run_duration }}" \
             --service-account="kabu-simulator-trainer@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
             --scopes=cloud-platform \
+            --boot-disk-size=30GB \
             --metadata-from-file=startup-script=training/startup-script.sh \
-            --metadata=REPO_URL=https://github.com/${{ github.repository }}.git,GCS_BUCKET=gs://kabu-simulator-runs-$(gcloud projects describe ${{ secrets.GCP_PROJECT_ID }} --format='value(projectNumber)'),TRAIN_CMD="${{ inputs.train_command }}"
+            --metadata=REPO_URL=https://github.com/${{ github.repository }}.git,GCS_BUCKET=gs://kabu-simulator-runs-$(gcloud projects describe ${{ secrets.GCP_PROJECT_ID }} --format='value(projectNumber)'),TRAIN_CMD="${{ inputs.train_command }}",serial-port-logging-enable=true
           echo "instance_name=$INSTANCE_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Show monitoring command
