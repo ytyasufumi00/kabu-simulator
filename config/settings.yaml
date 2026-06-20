@@ -1,0 +1,38 @@
+data_source: yfinance  # yfinance | jquants
+
+tickers:
+  - "7203.T"  # トヨタ自動車
+  - "6758.T"  # ソニーグループ
+  - "9984.T"  # ソフトバンクグループ
+  - "8306.T"  # 三菱UFJフィナンシャル・グループ
+  - "9432.T"  # 日本電信電話
+
+date_range:
+  start: "2015-01-01"
+  end: null  # null = today
+
+split:
+  train_start: "2015-01-01"
+  train_end: "2023-12-31"
+  test_start: "2024-01-01"
+  test_end: null  # null = today
+
+env:
+  window_size: 10        # 直近何日分の特徴量を観測に含めるか
+  initial_cash: 1000000.0 # 仮想元本（円）
+  commission_pct: 0.001   # 取引コスト（往復ではなく1回あたり）
+  slippage_bps: 0.0       # 将来拡張用フック（v1は0）
+
+ppo:
+  timesteps_per_iteration: 50000
+  learning_rate: 0.0003
+  n_steps: 2048
+  batch_size: 64
+  gamma: 0.99
+
+growth_loop:
+  n_iterations: 5
+
+paths:
+  data_cache: "data/cache"
+  runs: "runs"
