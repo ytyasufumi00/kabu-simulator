@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 from stable_baselines3 import PPO
 from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.vec_env import SubprocVecEnv, VecEnv
 
 from ..config import EnvConfig, PPOConfig
 from ..env.rewards import RewardStrategy
@@ -26,6 +27,41 @@ def make_env(
             reward_strategy=reward_strategy,
         )
     )
+
+
+class _EnvFactory:
+    """SubprocVecEnv用のpicklable環境ファクトリ。
+
+    Windowsのmultiprocessing（spawn方式）はローカル関数/ラムダをpickle化できないため、
+    トップレベルの呼び出し可能クラスとして定義する。
+    """
+
+    def __init__(self, df: pd.DataFrame, env_cfg: EnvConfig, reward_strategy: RewardStrategy | None):
+        self.df = df
+        self.env_cfg = env_cfg
+        self.reward_strategy = reward_strategy
+
+    def __call__(self) -> SingleAssetTradingEnv:
+        return make_env(self.df, self.env_cfg, reward_strategy=self.reward_strategy)
+
+
+def make_vec_env(
+    df: pd.DataFrame,
+    env_cfg: EnvConfig,
+    reward_strategy: RewardStrategy | None = None,
+    n_envs: int = 1,
+) -> SingleAssetTradingEnv | VecEnv:
+    """n_envs>1ならSubprocVecEnvでロールアウト収集を並列化する。
+
+    `model.learn(total_timesteps=N)` の N は n_envs に関わらず総経験量（環境ステップ数）の
+    意味を保つため、収集される学習データの総量・学習の精度には影響しない。
+    並列化によって短縮されるのは壁時計時間のみ。
+    """
+    if n_envs <= 1:
+        return make_env(df, env_cfg, reward_strategy=reward_strategy)
+
+    env_fns = [_EnvFactory(df, env_cfg, reward_strategy) for _ in range(n_envs)]
+    return SubprocVecEnv(env_fns)
 
 
 def train_one_iteration(

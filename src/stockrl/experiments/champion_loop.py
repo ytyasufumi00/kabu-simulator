@@ -118,6 +118,7 @@ def run_champion_loop(
             experiment_timesteps=experiments_cfg.experiment_timesteps,
             runs_dir=settings.runs_dir,
             settings_path=settings_path,
+            n_envs=experiments_cfg.n_envs,
         )
 
     best_variant_name = max(variant_results, key=lambda name: variant_results[name].mean_sharpe)

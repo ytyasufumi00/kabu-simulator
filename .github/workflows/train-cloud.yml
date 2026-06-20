@@ -1,0 +1,58 @@
+name: Run cloud training (Spot VM)
+
+on:
+  workflow_dispatch:
+    inputs:
+      machine_type:
+        description: "VMマシンタイプ（vCPU数はexperiments.yamlのn_envsと合わせる）"
+        default: "e2-standard-4"
+        required: false
+      max_run_duration:
+        description: "強制終了までの最大実行時間（コスト安全策）"
+        default: "21600s"
+        required: false
+      train_command:
+        description: "VM内で実行する学習コマンド（動作確認用に上書き可能）"
+        default: "python -m stockrl.cli.run_champion_loop_all_tickers"
+        required: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  launch:
+    runs-on: ubuntu-latest
+    steps:
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - id: launch
+        name: Launch Spot training VM
+        run: |
+          INSTANCE_NAME="kabu-simulator-trainer-$(date +%s)"
+          gcloud compute instances create "$INSTANCE_NAME" \
+            --project="${{ secrets.GCP_PROJECT_ID }}" \
+            --zone=asia-northeast1-a \
+            --machine-type="${{ inputs.machine_type }}" \
+            --image-family=debian-12 \
+            --image-project=debian-cloud \
+            --provisioning-model=SPOT \
+            --instance-termination-action=DELETE \
+            --max-run-duration="${{ inputs.max_run_duration }}" \
+            --service-account="kabu-simulator-trainer@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
+            --scopes=cloud-platform \
+            --metadata-from-file=startup-script=training/startup-script.sh \
+            --metadata=REPO_URL=https://github.com/${{ github.repository }}.git,GCS_BUCKET=gs://kabu-simulator-runs-$(gcloud projects describe ${{ secrets.GCP_PROJECT_ID }} --format='value(projectNumber)'),TRAIN_CMD="${{ inputs.train_command }}"
+          echo "instance_name=$INSTANCE_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Show monitoring command
+        run: |
+          echo "進行状況確認: gcloud compute instances get-serial-port-output ${{ steps.launch.outputs.instance_name }} --zone=asia-northeast1-a"
+          echo "VMは学習完了後（またはエラー時も）自動的に削除されます"

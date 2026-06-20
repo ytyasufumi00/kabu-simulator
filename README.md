@@ -74,6 +74,9 @@ python -m stockrl.cli.run_champion_loop_all_tickers
   平均シャープレシオの差が閾値（`min_fold_margin`）以上**の場合のみ自動昇格
 - 昇格判定の結果（勝敗にかかわらず）は`runs/{ticker}/promotions.csv`に記録
 - `snapshot_dashboard`は`champion/`が存在する銘柄ではそれを優先してダッシュボードに反映する
+- PPOのロールアウト収集は`config/experiments.yaml`の`n_envs`（既定4）でSB3の`SubprocVecEnv`により
+  並列化される。総timesteps（学習に使うデータ量）はn_envsに依存せず一定なので、学習の精度には
+  影響せず壁時計時間のみが短縮される。
 
 ### 既知の簡略化
 
@@ -111,3 +114,30 @@ Workload Identity Federation経由でGCPプロジェクト`project-1efc0d32-8b57
 のCloud Run（リージョン: asia-northeast1, サービス名: kabu-simulator-dashboard）に自動デプロイする。
 表示データは学習のたびに自動更新されるのではなく、`snapshot_dashboard`を再実行してcommit&pushした時点の
 スナップショット。
+
+## クラウド学習（Spot VM）
+
+`run_champion_loop_all_tickers`は数時間規模の処理になるため、PCを起動し続ける代わりに
+GCPのSpot（プリエンプティブル）VMで実行できる。
+
+```powershell
+# GitHub ActionsのUIから手動実行（Actions タブ → "Run cloud training (Spot VM)" → Run workflow）
+# または gh CLI から:
+gh workflow run train-cloud.yml --repo ytyasufumi00/kabu-simulator
+
+# 完了後、結果をローカルに同期
+python -m stockrl.cli.sync_cloud_results
+```
+
+### 仕組みとコスト安全策
+
+- 素のDebian VM（GCE公式イメージにgcloud/gsutilが標準搭載されているためコンテナ化不要）に
+  startup-scriptを渡すだけ。スクリプトがclone・依存インストール・学習・GCSへの結果アップロード・
+  自己削除まで一気通貫で行う（`training/startup-script.sh`）。
+- コスト安全策を多重化: Spot価格（オンデマンドの60〜90%引き）、`--instance-termination-action=DELETE`
+  （GCPにpreemptされても自動削除）、`--max-run-duration=21600s`（6時間で強制終了）、
+  スクリプト内`trap`による正常/異常終了時の自己削除。
+- 進行状況は`gcloud compute instances get-serial-port-output <インスタンス名> --zone=asia-northeast1-a`
+  で確認できる。
+- **VMの起動自体・GCS保存料金はGCPの計算課金（Claude APIとは別軸）が発生する**。Spot価格でも
+  ゼロにはならないため、念のため定期的に`gcloud compute instances list`でVMが残っていないか確認すること。

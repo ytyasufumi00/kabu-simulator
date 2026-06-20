@@ -35,6 +35,7 @@ class ExperimentsConfig:
     walk_forward: WalkForwardConfig
     promotion: PromotionConfig
     experiment_timesteps: int
+    n_envs: int
     variants: list[ExperimentVariant]
 
 
@@ -65,5 +66,6 @@ def load_experiments_config(path: Path = EXPERIMENTS_PATH) -> ExperimentsConfig:
             min_fold_margin=float(promotion_raw["min_fold_margin"]),
         ),
         experiment_timesteps=raw["experiment_timesteps"],
+        n_envs=raw.get("n_envs", 1),
         variants=variants,
     )
