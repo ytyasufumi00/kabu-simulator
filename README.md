@@ -53,3 +53,25 @@ python -m stockrl.cli.run_all_tickers --iterations 5
 ```powershell
 pytest tests/
 ```
+
+## 結果ダッシュボード（Cloud Run）
+
+`runs/`の結果を軽量データとして切り出し、Streamlitダッシュボードとして表示する。
+
+```powershell
+# runs/ から最新結果を dashboard/data/ にスナップショットとして切り出す
+python -m stockrl.cli.snapshot_dashboard
+
+# ローカルで確認
+cd dashboard
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+`dashboard/**`をmasterにpushすると、GitHub Actions（`.github/workflows/deploy-dashboard.yml`）が
+Workload Identity Federation経由でGCPプロジェクト`project-1efc0d32-8b57-40c7-b3a`（表示名: ckd-prediction-app）
+のCloud Run（リージョン: asia-northeast1, サービス名: kabu-simulator-dashboard）に自動デプロイする。
+表示データは学習のたびに自動更新されるのではなく、`snapshot_dashboard`を再実行してcommit&pushした時点の
+スナップショット。

@@ -1,0 +1,45 @@
+name: Deploy dashboard to Cloud Run
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "dashboard/**"
+      - ".github/workflows/deploy-dashboard.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - id: deploy
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: kabu-simulator-dashboard
+          region: asia-northeast1
+          source: ./dashboard
+
+      - name: Allow unauthenticated access
+        run: |
+          gcloud run services add-iam-policy-binding kabu-simulator-dashboard \
+            --region=asia-northeast1 \
+            --member="allUsers" \
+            --role="roles/run.invoker"
+
+      - name: Show service URL
+        run: echo "Deployed to ${{ steps.deploy.outputs.url }}"

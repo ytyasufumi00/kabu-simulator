@@ -1,0 +1,2 @@
+run_id,iteration,ticker,cumulative_return,cagr,sharpe_ratio,max_drawdown,win_rate,benchmark_cumulative_return,benchmark_sharpe_ratio
+9432.T_20260620_174409_000,0,9432.T,-0.16255679673297263,-0.07297211321750419,-0.3868965328284781,-0.2370139064600275,0.0,-0.1617193535297059,-0.38406483281214526
