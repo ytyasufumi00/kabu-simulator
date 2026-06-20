@@ -17,12 +17,13 @@ on:
         required: false
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
 
 jobs:
   launch:
     runs-on: ubuntu-latest
+    timeout-minutes: 370
     steps:
       - uses: actions/checkout@v4
 
@@ -63,3 +64,39 @@ jobs:
         run: |
           echo "進行状況確認: gcloud compute instances get-serial-port-output ${{ steps.launch.outputs.instance_name }} --zone=asia-northeast1-a"
           echo "VMは学習完了後（またはエラー時も）自動的に削除されます"
+
+      - name: Wait for training VM to finish
+        run: |
+          INSTANCE_NAME="${{ steps.launch.outputs.instance_name }}"
+          echo "学習完了（VM自己削除）を待機します..."
+          while gcloud compute instances describe "$INSTANCE_NAME" \
+              --zone=asia-northeast1-a \
+              --project="${{ secrets.GCP_PROJECT_ID }}" >/dev/null 2>&1; do
+            sleep 30
+          done
+          echo "VMが終了しました（学習完了 or エラー終了）。"
+
+      - name: Sync results and refresh dashboard snapshot
+        run: |
+          PROJECT_NUMBER=$(gcloud projects describe "${{ secrets.GCP_PROJECT_ID }}" --format='value(projectNumber)')
+          gcloud storage rsync -r "gs://kabu-simulator-runs-${PROJECT_NUMBER}/runs/" runs/
+          python3 -m venv /tmp/.venv-sync
+          . /tmp/.venv-sync/bin/activate
+          pip install --upgrade pip
+          # ダッシュボードのスナップショット作成にはPyYAML/python-dotenvのみで十分
+          # （torch等の重い依存はクラウド学習VM側だけにあれば良い）
+          pip install -e . --no-deps
+          pip install pyyaml python-dotenv
+          python -m stockrl.cli.snapshot_dashboard
+
+      - name: Commit and push dashboard snapshot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add dashboard/data
+          if git diff --staged --quiet; then
+            echo "ダッシュボードに変更なし（スキップ）"
+          else
+            git commit -m "クラウド学習結果でダッシュボードを自動更新"
+            git push
+          fi

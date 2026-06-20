@@ -1,0 +1,7 @@
+{
+  "name": "higher_lr",
+  "reward_strategy": "log_return",
+  "ppo_overrides": {
+    "learning_rate": 0.001
+  }
+}

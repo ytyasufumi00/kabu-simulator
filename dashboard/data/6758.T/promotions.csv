@@ -1,0 +1,2 @@
+timestamp,variant_name,win_ratio,margin,promoted,reason
+2026-06-20T13:39:46,baseline,1.0,inf,True,既存championが存在しない

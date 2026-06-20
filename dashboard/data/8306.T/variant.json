@@ -1,0 +1,5 @@
+{
+  "name": "baseline",
+  "reward_strategy": "log_return",
+  "ppo_overrides": {}
+}
