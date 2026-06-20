@@ -1,0 +1,25 @@
+walk_forward:
+  n_splits: 3
+  train_period_days: 700   # 約2.8年分（営業日ベース）
+  test_period_days: 120    # 約6ヶ月分
+
+# 探索フェーズ用の学習タイムステップ（growth_loopの本採用後の継続学習用timestepsとは別）
+experiment_timesteps: 20000
+
+promotion:
+  min_fold_win_ratio: 0.6   # 過半数以上のfoldで勝つ必要がある
+  min_fold_margin: 0.05     # 平均シャープレシオで+0.05以上の差が必要
+
+variants:
+  - name: baseline
+    reward_strategy: log_return
+    ppo: {}
+
+  - name: risk_adjusted_reward
+    reward_strategy: risk_adjusted
+    ppo: {}
+
+  - name: higher_lr
+    reward_strategy: log_return
+    ppo:
+      learning_rate: 0.001

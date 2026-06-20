@@ -7,10 +7,15 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.monitor import Monitor
 
 from ..config import EnvConfig, PPOConfig
+from ..env.rewards import RewardStrategy
 from ..env.single_asset_env import SingleAssetTradingEnv
 
 
-def make_env(df: pd.DataFrame, env_cfg: EnvConfig) -> SingleAssetTradingEnv:
+def make_env(
+    df: pd.DataFrame,
+    env_cfg: EnvConfig,
+    reward_strategy: RewardStrategy | None = None,
+) -> SingleAssetTradingEnv:
     return Monitor(
         SingleAssetTradingEnv(
             df=df,
@@ -18,6 +23,7 @@ def make_env(df: pd.DataFrame, env_cfg: EnvConfig) -> SingleAssetTradingEnv:
             initial_cash=env_cfg.initial_cash,
             commission_pct=env_cfg.commission_pct,
             slippage_bps=env_cfg.slippage_bps,
+            reward_strategy=reward_strategy,
         )
     )
 
@@ -28,13 +34,14 @@ def train_one_iteration(
     ppo_cfg: PPOConfig,
     model_path_in: Path | None,
     tensorboard_log: Path | None = None,
+    reward_strategy: RewardStrategy | None = None,
 ) -> PPO:
     """train_df上でPPOを学習する。既存チェックポイントがあれば継続学習する。
 
     継続学習することで growth_loop の各イテレーションが
     「前回までの学習成果の上に積む」形になる。
     """
-    env = make_env(train_df, env_cfg)
+    env = make_env(train_df, env_cfg, reward_strategy=reward_strategy)
 
     if model_path_in is not None and model_path_in.exists():
         model = PPO.load(str(model_path_in), env=env)
