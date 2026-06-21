@@ -94,6 +94,61 @@ def build_commentary(metrics: dict, history: pd.DataFrame | None) -> list[str]:
     return notes
 
 
+ACTION_LABELS = {"buy": "買い", "sell": "売り", "hold": "ホールド"}
+
+
+def render_today_action_panel(ticker_dirs: list[Path]) -> None:
+    rows = []
+    for ticker_dir in ticker_dirs:
+        log_path = ticker_dir / "forward_test" / "daily_log.csv"
+        if not log_path.exists():
+            continue
+        log = pd.read_csv(log_path)
+        if log.empty:
+            continue
+        latest = log.iloc[-1]
+        rows.append(
+            {
+                "ticker": ticker_dir.name,
+                "name": TICKER_NAMES.get(ticker_dir.name, ticker_dir.name),
+                "date": str(latest["date"]),
+                "action": latest["action"],
+                "price": float(latest["price"]),
+                "shares_held": float(latest["shares_held"]),
+            }
+        )
+
+    if not rows:
+        return
+
+    st.header("本日のアクション（championの判断）")
+    st.caption(
+        "championの判断に従う方針のもと、今日確認すべき内容だけをまとめています。"
+        "参考株数は仮想フォワードテスト（1銘柄20万円）での値です。実際の発注量はご自身の資金に合わせて調整してください。"
+    )
+
+    for row in rows:
+        cols = st.columns([2, 1.2, 2.3, 1.5])
+        cols[0].markdown(f"**{row['name']}（{row['ticker']}）**")
+
+        label = ACTION_LABELS.get(row["action"], row["action"])
+        if row["action"] == "buy":
+            cols[1].success(label)
+        elif row["action"] == "sell":
+            cols[1].error(label)
+        else:
+            cols[1].info(label)
+
+        cols[2].write(f"価格: {row['price']:,.1f}円 ／ 参考株数: {row['shares_held']:.0f}株")
+
+        quote_url = f"https://finance.yahoo.co.jp/quote/{row['ticker']}"
+        cols[3].link_button("価格を確認", quote_url)
+
+    latest_date = max(row["date"] for row in rows)
+    st.caption(f"判断日: {latest_date}（championは月初に固定したモデルをそのまま使用）")
+    st.divider()
+
+
 def render_forward_test_summary(data_dir: Path) -> None:
     combined_path = data_dir / "_forward_test" / "combined.csv"
     if not combined_path.exists():
@@ -360,8 +415,6 @@ def main() -> None:
         st.warning("データがまだありません。")
         return
 
-    render_forward_test_summary(DATA_DIR)
-
     ticker_dirs = sorted(
         d for d in DATA_DIR.iterdir() if d.is_dir() and not d.name.startswith("_")
     )
@@ -369,6 +422,8 @@ def main() -> None:
         st.warning("データがまだありません。")
         return
 
+    render_today_action_panel(ticker_dirs)
+    render_forward_test_summary(DATA_DIR)
     render_promotion_panel(ticker_dirs)
 
     st.header("詳細（銘柄別・過去データでの検証結果）")
