@@ -12,6 +12,25 @@ from .rewards import LogReturnReward, RewardStrategy
 HOLD, BUY, SELL = 0, 1, 2
 
 
+def build_observation(
+    window_features: np.ndarray, portfolio: Portfolio, price: float, initial_cash: float
+) -> np.ndarray:
+    """直近window分の特徴量とポートフォリオ状態から観測ベクトルを作る。
+
+    学習済みモデルが前提とする観測フォーマットと完全に一致させる必要があるため、
+    env内部（_obs）とフォワードテストの両方からこの関数を呼ぶ。
+    """
+    window = window_features.flatten()
+    equity = portfolio.equity(price)
+    cash_ratio = portfolio.cash / equity if equity > 0 else 0.0
+    has_position = 1.0 if portfolio.shares_held > 0 else 0.0
+    unrealized_pnl_ratio = equity / initial_cash - 1.0 if initial_cash > 0 else 0.0
+    portfolio_obs = np.array(
+        [cash_ratio, has_position, unrealized_pnl_ratio], dtype=np.float32
+    )
+    return np.concatenate([window, portfolio_obs]).astype(np.float32)
+
+
 class SingleAssetTradingEnv(gym.Env):
     """1銘柄に対する仮想取引環境（全部買い/全部売り/ホールドの3択）。
 
@@ -67,20 +86,9 @@ class SingleAssetTradingEnv(gym.Env):
         return self._portfolio
 
     def _obs(self) -> np.ndarray:
-        window = self._features[
-            self._step_idx - self._window_size : self._step_idx
-        ].flatten()
+        window = self._features[self._step_idx - self._window_size : self._step_idx]
         price = self._close[self._step_idx]
-        equity = self._portfolio.equity(price)
-        cash_ratio = self._portfolio.cash / equity if equity > 0 else 0.0
-        has_position = 1.0 if self._portfolio.shares_held > 0 else 0.0
-        unrealized_pnl_ratio = (
-            equity / self._initial_cash - 1.0 if self._initial_cash > 0 else 0.0
-        )
-        portfolio_obs = np.array(
-            [cash_ratio, has_position, unrealized_pnl_ratio], dtype=np.float32
-        )
-        return np.concatenate([window, portfolio_obs]).astype(np.float32)
+        return build_observation(window, self._portfolio, price, self._initial_cash)
 
     def reset(self, *, seed: int | None = None, options: dict | None = None):
         super().reset(seed=seed)

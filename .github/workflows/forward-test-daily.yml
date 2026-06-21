@@ -1,0 +1,65 @@
+name: Forward test (daily paper trading)
+
+on:
+  schedule:
+    - cron: "0 7 * * 1-5" # UTC 7:00 = JST 16:00（平日、東証引け後）
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  forward-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Download forward-test state and champions from GCS
+        run: |
+          PROJECT_NUMBER=$(gcloud projects describe "${{ secrets.GCP_PROJECT_ID }}" --format='value(projectNumber)')
+          mkdir -p runs
+          gcloud storage rsync -r "gs://kabu-simulator-runs-${PROJECT_NUMBER}/runs/" runs/
+
+      - name: Install dependencies
+        run: |
+          python3 -m venv .venv
+          . .venv/bin/activate
+          pip install --upgrade pip
+          # 学習用Spot VMと同じ対策: torch>=2.4を無指定で入れるとCUDA同梱版（数GB）を
+          # 引いてしまうため、CPU専用版を先にインストールしておく
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Run forward test
+        run: |
+          . .venv/bin/activate
+          python -m stockrl.cli.run_forward_test
+
+      - name: Upload updated state to GCS
+        run: |
+          PROJECT_NUMBER=$(gcloud projects describe "${{ secrets.GCP_PROJECT_ID }}" --format='value(projectNumber)')
+          gcloud storage rsync -r runs/ "gs://kabu-simulator-runs-${PROJECT_NUMBER}/runs/"
+
+      - name: Commit and push dashboard snapshot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add dashboard/data
+          if git diff --staged --quiet; then
+            echo "ダッシュボードに変更なし（スキップ）"
+          else
+            git commit -m "フォワードテスト結果を自動更新"
+            git push
+          fi

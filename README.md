@@ -141,3 +141,37 @@ python -m stockrl.cli.sync_cloud_results
   で確認できる。
 - **VMの起動自体・GCS保存料金はGCPの計算課金（Claude APIとは別軸）が発生する**。Spot価格でも
   ゼロにはならないため、念のため定期的に`gcloud compute instances list`でVMが残っていないか確認すること。
+
+## フォワードテスト（未来のデータでのchampion運用検証）
+
+walk-forwardはあくまで過去データへの検証であり、過学習を否定できない。そこで、**championモデルを
+1ヶ月単位で固定し、まだ結果のわからない未来の値動きに対して推論だけを行う**フォワードテスト
+（ペーパートレード）を毎営業日自動実行する。
+
+```powershell
+# 手動実行（通常はGitHub Actionsのcronが平日自動実行する）
+python -m stockrl.cli.run_forward_test
+```
+
+### 仕組み
+
+- `config/forward_test.yaml`で対象銘柄・1銘柄あたりの仮想投資額を定義する
+  （初期値: 100万円を5銘柄に20万円ずつ）。銘柄を追加する場合はここに追記する
+  （既存銘柄からの引き出し・再配分はせず、新規の追加投資として扱う簡略化）。
+- 月初の最初の実行で`runs/{ticker}/champion/`（バックテストのChampion/Challengerループが
+  継続的に更新するもの）のスナップショットを`runs/{ticker}/forward_champion/`に複製する。
+  以降1ヶ月間はこの固定モデルだけで推論を行う（バックテスト側のループ自体は今までどおり
+  好きなタイミングで実行してよい。止まるのはフォワードテストの対象モデルだけ）。
+- 観測ベクトルの生成は`env/single_asset_env.py`の`build_observation()`を直接呼び、
+  学習時と完全に同じフォーマットを保証する。
+- Portfolio状態（cash・保有株数）は`runs/{ticker}/forward_test/state.json`に永続化し、
+  日次ログは`daily_log.csv`に追記する。状態はGCS（`kabu-simulator-runs-...`バケット、
+  クラウド学習と共用）経由でGitHub Actionsの実行間を引き継ぐ。
+- ダッシュボードでは全銘柄の評価額を合計し、「投資総額」と「評価額」の2本線で表示する
+  （積立投資アプリでよく見る形式。銘柄追加のたびに投資総額が増える）。
+
+### 実行タイミングとコスト
+
+- `.github/workflows/forward-test-daily.yml`が平日JST16:00頃（東証引け後）に自動実行する。
+- 学習ではなく推論のみのため、Spot VMは使わず通常のGitHub Actionsランナーで数分で完了する
+  （public repoのため実行時間は無料）。GCSの保存料も日次の数KB程度でほぼ無視できる。

@@ -88,6 +88,49 @@ def build_commentary(metrics: dict, history: pd.DataFrame | None) -> list[str]:
     return notes
 
 
+def render_forward_test_summary(data_dir: Path) -> None:
+    combined_path = data_dir / "_forward_test" / "combined.csv"
+    if not combined_path.exists():
+        return
+
+    combined = pd.read_csv(combined_path, parse_dates=["date"])
+    if combined.empty:
+        return
+
+    st.header("フォワードテスト：もし100万円を運用していたら")
+    st.caption(
+        "実際の値動き（過去ではなく、システムが予測した時点でまだ結果が分からなかったデータ）に対して、"
+        "選定済みのアルゴリズム（championモデル）をそのまま使い続けた場合の仮想運用結果です。"
+        "アルゴリズムは1ヶ月ごとに更新され、銘柄は段階的に追加されます。"
+    )
+
+    latest = combined.iloc[-1]
+    contributed = float(latest["total_contributed"])
+    equity = float(latest["total_equity"])
+    diff = equity - contributed
+    diff_pct = diff / contributed if contributed > 0 else 0.0
+
+    cols = st.columns(2)
+    cols[0].metric("投資総額", f"{contributed:,.0f}円")
+    cols[1].metric("現在の評価額", f"{equity:,.0f}円", f"{diff:+,.0f}円（{diff_pct:+.1%}）")
+
+    chart_df = combined.set_index("date")[["total_contributed", "total_equity"]]
+    chart_df = chart_df.rename(
+        columns={"total_contributed": "投資総額", "total_equity": "評価額"}
+    )
+    st.line_chart(chart_df)
+
+    if diff > 0:
+        st.write(f"- 現時点では投資総額を{diff:,.0f}円上回っています（+{diff_pct:.1%}）。")
+    else:
+        st.write(f"- 現時点では投資総額を{-diff:,.0f}円下回っています（{diff_pct:.1%}）。")
+    st.write(
+        "- これは過去データへの当てはめではなく、未知のデータに対する仮想運用結果です。"
+        "ただし検証期間がまだ短いため、結果が安定するまでは参考程度に留めてください。"
+    )
+    st.divider()
+
+
 def render_ticker_section(ticker: str, ticker_dir: Path) -> None:
     display_name = TICKER_NAMES.get(ticker, ticker)
     st.header(f"{display_name}（{ticker}）")
@@ -134,11 +177,16 @@ def main() -> None:
         st.warning("データがまだありません。")
         return
 
-    ticker_dirs = sorted(d for d in DATA_DIR.iterdir() if d.is_dir())
+    render_forward_test_summary(DATA_DIR)
+
+    ticker_dirs = sorted(
+        d for d in DATA_DIR.iterdir() if d.is_dir() and not d.name.startswith("_")
+    )
     if not ticker_dirs:
         st.warning("データがまだありません。")
         return
 
+    st.header("詳細（銘柄別・過去データでの検証結果）")
     for ticker_dir in ticker_dirs:
         render_ticker_section(ticker_dir.name, ticker_dir)
 
