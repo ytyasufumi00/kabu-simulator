@@ -162,6 +162,53 @@ def render_ticker_section(ticker: str, ticker_dir: Path) -> None:
         st.subheader("成長ループの推移")
         st.line_chart(history.set_index("iteration")[["sharpe_ratio", "cumulative_return"]])
 
+    trades_path = ticker_dir / "trades.csv"
+    if trades_path.exists():
+        trades = pd.read_csv(trades_path)
+        if not trades.empty:
+            st.subheader("取引ログ（バックテスト期間）")
+            trades_display = trades.rename(
+                columns={
+                    "step": "ステップ",
+                    "action": "売買",
+                    "price": "価格",
+                    "shares": "株数",
+                    "cost": "手数料",
+                }
+            )
+            trades_display["売買"] = trades_display["売買"].map(
+                {"buy": "買い", "sell": "売り"}
+            )
+            st.dataframe(
+                trades_display.sort_values("ステップ", ascending=False),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+    forward_log_path = ticker_dir / "forward_test" / "daily_log.csv"
+    if forward_log_path.exists():
+        forward_log = pd.read_csv(forward_log_path)
+        if not forward_log.empty:
+            st.subheader("取引ログ（フォワードテスト・日次）")
+            forward_display = forward_log.rename(
+                columns={
+                    "date": "日付",
+                    "action": "判断",
+                    "price": "価格",
+                    "cash": "現金",
+                    "shares_held": "保有株数",
+                    "equity": "評価額",
+                }
+            )
+            forward_display["判断"] = forward_display["判断"].map(
+                {"buy": "買い", "sell": "売り", "hold": "ホールド"}
+            )
+            st.dataframe(
+                forward_display.sort_values("日付", ascending=False),
+                use_container_width=True,
+                hide_index=True,
+            )
+
     st.divider()
 
 

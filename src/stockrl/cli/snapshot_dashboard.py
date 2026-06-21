@@ -45,7 +45,7 @@ def main() -> None:
         out_dir = dashboard_data_dir / ticker
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        for filename in ("equity_curve.png", "metrics.json", "variant.json"):
+        for filename in ("equity_curve.png", "metrics.json", "variant.json", "trades.csv"):
             src = source_dir / filename
             if src.exists():
                 shutil.copy(src, out_dir / filename)
