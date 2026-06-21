@@ -115,6 +115,30 @@ Workload Identity Federation経由でGCPプロジェクト`project-1efc0d32-8b57
 表示データは学習のたびに自動更新されるのではなく、`snapshot_dashboard`を再実行してcommit&pushした時点の
 スナップショット。
 
+### Champion比較＆再学習トリガー（ダッシュボード上のボタン）
+
+ダッシュボードには、各銘柄のChampion/Challenger比較履歴（`promotions.csv`）の一覧と、
+クラウド学習（`train-cloud.yml`）をその場で起動できるボタンがある。
+
+- このCloud Runサービスは`Allow unauthenticated access`設定で**URLを知っていれば誰でも閲覧できる**。
+  起動ボタンは課金を伴う操作のため、ダッシュボード上の「管理者操作」欄でパスワード認証を要求する
+  （簡易的な誤操作防止であり、強固なアクセス制御ではない）。
+- 認証後にボタンを押すと、GitHub REST API（`POST /repos/.../actions/workflows/train-cloud.yml/dispatches`）
+  経由でワークフローをdispatchする。GitHub Actions上で動くワークフロー自体は組み込みの`GITHUB_TOKEN`を
+  使えるが、**Cloud Run上で動くStreamlitアプリから外部にdispatchするには別途PAT（Personal Access Token）
+  が必要**なため、`Actions: Read and write`権限のfine-grained PATをSecret Manager経由で渡している。
+- 必要なGCP Secret Manager上のシークレット（Cloud Runへは`deploy-cloudrun`の`secrets`入力で
+  `DASHBOARD_ADMIN_SECRET` / `GH_DISPATCH_TOKEN`として注入）:
+  - `dashboard-admin-secret`: ダッシュボードの管理者パスワード
+  - `dashboard-gh-dispatch-token`: `kabu-simulator`リポジトリの`Actions: Read and write`権限を持つ
+    fine-grained PAT。**有効期限が切れたら再作成し`gcloud secrets versions add dashboard-gh-dispatch-token
+    --data-file=-`で更新が必要**。
+  - 両シークレットはCloud Runランタイムサービスアカウント（`<project-number>-compute@developer.gserviceaccount.com`）
+    と デプロイ用サービスアカウント（`kabu-simulator-deployer@...`）に`roles/secretmanager.secretAccessor`を付与済み。
+- ダッシュボードには「前回の比較実行から何日経過したか」を表示し、14日以上経過していれば再実行を推奨する
+  警告を出す（目安: 2週間〜1ヶ月、フォワードテストの結果がバックテストと大きくズレた時、月初のフォワード
+  championスナップショット更新前）。
+
 ## クラウド学習（Spot VM）
 
 `run_champion_loop_all_tickers`は数時間規模の処理になるため、PCを起動し続ける代わりに

@@ -33,6 +33,9 @@ jobs:
           service: kabu-simulator-dashboard
           region: asia-northeast1
           source: ./dashboard
+          secrets: |
+            DASHBOARD_ADMIN_SECRET=dashboard-admin-secret:latest
+            GH_DISPATCH_TOKEN=dashboard-gh-dispatch-token:latest
 
       - name: Allow unauthenticated access
         run: |

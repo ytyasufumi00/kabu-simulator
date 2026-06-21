@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pandas as pd
+import requests
 import streamlit as st
 
 DATA_DIR = Path(__file__).parent / "data"
+
+GITHUB_REPO = "ytyasufumi00/kabu-simulator"
+TRAIN_WORKFLOW_FILE = "train-cloud.yml"
+PROMOTION_RECOMMENDED_INTERVAL_DAYS = 14
 
 TICKER_NAMES = {
     "7203.T": "トヨタ自動車",
@@ -131,6 +137,136 @@ def render_forward_test_summary(data_dir: Path) -> None:
     st.divider()
 
 
+def trigger_cloud_training() -> tuple[bool, str]:
+    token = os.environ.get("GH_DISPATCH_TOKEN")
+    if not token:
+        return False, "GH_DISPATCH_TOKENが設定されていないため起動できません。"
+
+    url = (
+        f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/"
+        f"{TRAIN_WORKFLOW_FILE}/dispatches"
+    )
+    try:
+        resp = requests.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github+json",
+            },
+            json={"ref": "master"},
+            timeout=10,
+        )
+    except requests.RequestException as e:
+        return False, f"GitHub APIへの接続に失敗しました: {e}"
+
+    if resp.status_code == 204:
+        return True, "クラウド学習（Champion比較・昇格判定）を起動しました。"
+    return False, f"起動に失敗しました（status={resp.status_code}）: {resp.text[:200]}"
+
+
+def render_promotion_panel(ticker_dirs: list[Path]) -> None:
+    st.header("Championの比較＆再学習トリガー")
+    st.caption(
+        "各銘柄でChampion（現在選定中の最良アルゴリズム）とChallenger（新しい候補）を比較した"
+        "履歴と、クラウド上で新しい比較・昇格判定を起動する操作です。"
+    )
+
+    promotion_frames = []
+    latest_ts: pd.Timestamp | None = None
+    for ticker_dir in ticker_dirs:
+        promo_path = ticker_dir / "promotions.csv"
+        if not promo_path.exists():
+            continue
+        df = pd.read_csv(promo_path, parse_dates=["timestamp"])
+        if df.empty:
+            continue
+        df["ticker"] = TICKER_NAMES.get(ticker_dir.name, ticker_dir.name)
+        promotion_frames.append(df)
+        ts = df["timestamp"].max()
+        if latest_ts is None or ts > latest_ts:
+            latest_ts = ts
+
+    st.subheader("推奨実行タイミング")
+    if latest_ts is not None:
+        days_since = (pd.Timestamp.now() - latest_ts).days
+        st.write(f"- 前回のChampion比較から**{days_since}日**経過しています。")
+        if days_since >= PROMOTION_RECOMMENDED_INTERVAL_DAYS:
+            st.warning(
+                f"{PROMOTION_RECOMMENDED_INTERVAL_DAYS}日以上経過しています。"
+                "新しい価格データが蓄積されているため、再実行を推奨します。"
+            )
+        else:
+            st.write("- 直近で実行済みのため、急いで再実行する必要はありません。")
+    else:
+        st.write("- まだ比較履歴がありません。初回の学習を起動してください。")
+    st.write(
+        "- 目安となるタイミング: "
+        "①前回実行から2週間〜1ヶ月程度経過した時／"
+        "②フォワードテストの結果がバックテストの想定と大きくズレている時／"
+        "③月初のフォワード用championスナップショット更新前に最新化したい時。"
+    )
+
+    if promotion_frames:
+        st.subheader("直近の比較結果（全銘柄）")
+        all_promotions = pd.concat(promotion_frames, ignore_index=True)
+        all_promotions = all_promotions.sort_values("timestamp", ascending=False)
+        display = all_promotions.rename(
+            columns={
+                "timestamp": "実行日時",
+                "ticker": "銘柄",
+                "variant_name": "比較候補（Challenger）",
+                "win_ratio": "勝率（fold単位）",
+                "margin": "シャープレシオ差",
+                "promoted": "昇格したか",
+                "reason": "判定理由",
+            }
+        )
+        display["昇格したか"] = display["昇格したか"].map({True: "昇格", False: "見送り"})
+        column_order = [
+            "実行日時",
+            "銘柄",
+            "比較候補（Challenger）",
+            "勝率（fold単位）",
+            "シャープレシオ差",
+            "昇格したか",
+            "判定理由",
+        ]
+        st.dataframe(
+            display[column_order], use_container_width=True, hide_index=True
+        )
+
+    st.subheader("クラウド学習を起動")
+    st.write(
+        "ボタンを押すとGitHub Actions経由でGCP Spot VMが起動し、"
+        "全銘柄のChampion/Challenger比較・昇格判定を行います（完了まで数時間）。"
+        "課金を伴う操作のため、管理者パスワードが必要です。"
+    )
+    with st.expander("管理者操作"):
+        admin_secret = os.environ.get("DASHBOARD_ADMIN_SECRET")
+        password = st.text_input("管理者パスワード", type="password", key="admin_pw")
+
+        if password:
+            if admin_secret and password == admin_secret:
+                st.session_state["is_admin"] = True
+            else:
+                st.session_state["is_admin"] = False
+                st.error("パスワードが正しくありません。")
+
+        if st.session_state.get("is_admin"):
+            st.success("認証済みです。")
+            if st.button("クラウド学習（Champion比較・昇格判定）を起動する"):
+                ok, msg = trigger_cloud_training()
+                if ok:
+                    st.success(msg)
+                    st.write(
+                        "GitHub Actionsの`Run cloud training (Spot VM)`ワークフローで進捗を確認できます。"
+                    )
+                else:
+                    st.error(msg)
+
+    st.divider()
+
+
 def render_ticker_section(ticker: str, ticker_dir: Path) -> None:
     display_name = TICKER_NAMES.get(ticker, ticker)
     st.header(f"{display_name}（{ticker}）")
@@ -232,6 +368,8 @@ def main() -> None:
     if not ticker_dirs:
         st.warning("データがまだありません。")
         return
+
+    render_promotion_panel(ticker_dirs)
 
     st.header("詳細（銘柄別・過去データでの検証結果）")
     for ticker_dir in ticker_dirs:
