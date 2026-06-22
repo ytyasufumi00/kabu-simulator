@@ -61,5 +61,10 @@ jobs:
             echo "ダッシュボードに変更なし（スキップ）"
           else
             git commit -m "フォワードテスト結果を自動更新"
-            git push
+            for i in 1 2 3 4 5; do
+              git push && break
+              git fetch origin master
+              git rebase origin/master
+              sleep $((RANDOM % 5 + 1))
+            done
           fi
