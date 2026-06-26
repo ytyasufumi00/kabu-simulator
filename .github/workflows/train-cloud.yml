@@ -26,6 +26,8 @@ jobs:
     timeout-minutes: 370
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.DEPLOY_TRIGGER_TOKEN }}
 
       - id: auth
         uses: google-github-actions/auth@v2
