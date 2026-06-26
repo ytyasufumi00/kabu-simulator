@@ -2,3 +2,4 @@ timestamp,variant_name,win_ratio,margin,promoted,reason
 2026-06-20T14:51:36,higher_lr,1.0,inf,True,既存championが存在しない
 2026-06-20T23:47:45,higher_lr,1.0,1.3479939723291827,True,"win_ratio=1.00 (閾値0.60), margin=+1.3480 (閾値0.0500)"
 2026-06-21T12:34:20,risk_adjusted_reward,0.3333333333333333,-1.176283930979146,False,"win_ratio=0.33 (閾値0.60), margin=-1.1763 (閾値0.0500)"
+2026-06-26T09:47:38,higher_lr,0.3333333333333333,-1.3983266784141197,False,"win_ratio=0.33 (閾値0.60), margin=-1.3983 (閾値0.0500)"
