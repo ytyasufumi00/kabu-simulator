@@ -36,7 +36,7 @@ def main() -> None:
             print("  スキップ（forward_champion未作成、または本日分は処理済み）")
         else:
             print(
-                f"  {result['date']}: action={result['action']} "
+                f"  {result['date']}: target_pct={result['target_pct']:.1%} "
                 f"equity={result['equity']:.0f}"
             )
 

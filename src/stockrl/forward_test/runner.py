@@ -6,14 +6,18 @@ from datetime import date
 from pathlib import Path
 
 import pandas as pd
+from gymnasium import spaces
 from stable_baselines3 import PPO
 
 from ..config import Settings
 from ..dataset import load_ticker_features
 from ..env.portfolio import Portfolio
-from ..env.single_asset_env import HOLD, SELL, build_observation
+from ..env.risk import RiskLimits, apply_risk_overlay
+from ..env.single_asset_env import build_observation
 from ..features.pipeline import FEATURE_COLUMNS
 from .state import ForwardState, daily_log_path
+
+_VOLATILITY_IDX = FEATURE_COLUMNS.index("volatility_20")
 
 
 def ensure_forward_champion(ticker: str, runs_dir: Path, today: date) -> bool:
@@ -76,6 +80,8 @@ def run_daily_step(
 ) -> tuple[ForwardState, dict | None]:
     """1銘柄について最新データで1日分のフォワードテストを進める。
 
+    モデルは目標配分（0.0〜1.0）を出力し、最大保有比率・ボラティリティターゲティング・
+    ストップロスの安全装置（risk.apply_risk_overlay）を適用したうえで部分リバランスする。
     forward_championが存在しない、または既に最新日まで処理済みの場合は
     (state, None) を返す（呼び出し側はstateをそのまま保存してよい）。
     """
@@ -94,11 +100,14 @@ def run_daily_step(
 
     window_features = features_df[FEATURE_COLUMNS].to_numpy(dtype="float32")[-window_size:]
     price = float(features_df["close"].iloc[-1])
+    # 前日までに確定した値（当日のcloseに基づく値を使うと先読みになるため）
+    volatility = float(features_df[FEATURE_COLUMNS[_VOLATILITY_IDX]].iloc[-2])
 
     portfolio = Portfolio(
         initial_cash=per_ticker_capital,
         commission_pct=settings.env.commission_pct,
         slippage_bps=settings.env.slippage_bps,
+        min_trade_pct=settings.env.min_trade_pct,
     )
     portfolio.cash = state.cash
     portfolio.shares_held = state.shares_held
@@ -106,25 +115,39 @@ def run_daily_step(
     obs = build_observation(window_features, portfolio, price, per_ticker_capital)
 
     model = PPO.load(str(forward_model_path))
-    action, _ = model.predict(obs, deterministic=True)
-    action = int(action)
+    if not isinstance(model.action_space, spaces.Box):
+        raise RuntimeError(
+            f"{ticker}: forward_championが旧形式（離散行動空間）のままです。"
+            "クラウド学習を再実行して連続配分対応のchampionを作り直してください。"
+        )
+    raw_action, _ = model.predict(obs, deterministic=True)
+    raw_target_pct = float(raw_action.reshape(-1)[0])
 
-    if action == HOLD:
-        pass
-    elif action == SELL:
-        portfolio.sell_all(0, price)
-    else:  # BUY
-        portfolio.buy_all(0, price)
+    equity_before = portfolio.equity(price)
+    peak_equity = max(state.peak_equity, equity_before)
+    risk_limits = RiskLimits(
+        max_position_pct=settings.env.max_position_pct,
+        target_volatility=settings.env.target_volatility,
+        stop_loss_drawdown_pct=settings.env.stop_loss_drawdown_pct,
+    )
+    target_pct = apply_risk_overlay(
+        raw_target_pct,
+        volatility=volatility,
+        peak_equity=peak_equity,
+        current_equity=equity_before,
+        limits=risk_limits,
+    )
 
+    portfolio.rebalance_to(0, target_pct, price)
     equity = portfolio.equity(price)
-    action_label = {0: "hold", 1: "buy", 2: "sell"}[action]
+    peak_equity = max(peak_equity, equity)
 
     _append_daily_log(
         ticker,
         runs_dir,
         {
             "date": latest_date,
-            "action": action_label,
+            "target_pct": target_pct,
             "price": price,
             "cash": portfolio.cash,
             "shares_held": portfolio.shares_held,
@@ -133,10 +156,13 @@ def run_daily_step(
     )
 
     new_state = ForwardState(
-        cash=portfolio.cash, shares_held=portfolio.shares_held, last_date=latest_date
+        cash=portfolio.cash,
+        shares_held=portfolio.shares_held,
+        last_date=latest_date,
+        peak_equity=peak_equity,
     )
     return new_state, {
         "date": latest_date,
-        "action": action_label,
+        "target_pct": target_pct,
         "equity": equity,
     }

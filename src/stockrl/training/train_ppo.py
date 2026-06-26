@@ -9,6 +9,7 @@ from stable_baselines3.common.vec_env import SubprocVecEnv, VecEnv
 
 from ..config import EnvConfig, PPOConfig
 from ..env.rewards import RewardStrategy
+from ..env.risk import RiskLimits
 from ..env.single_asset_env import SingleAssetTradingEnv
 
 
@@ -24,6 +25,12 @@ def make_env(
             initial_cash=env_cfg.initial_cash,
             commission_pct=env_cfg.commission_pct,
             slippage_bps=env_cfg.slippage_bps,
+            min_trade_pct=env_cfg.min_trade_pct,
+            risk_limits=RiskLimits(
+                max_position_pct=env_cfg.max_position_pct,
+                target_volatility=env_cfg.target_volatility,
+                stop_loss_drawdown_pct=env_cfg.stop_loss_drawdown_pct,
+            ),
             reward_strategy=reward_strategy,
         )
     )

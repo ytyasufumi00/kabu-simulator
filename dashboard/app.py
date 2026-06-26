@@ -94,9 +94,6 @@ def build_commentary(metrics: dict, history: pd.DataFrame | None) -> list[str]:
     return notes
 
 
-ACTION_LABELS = {"buy": "買い", "sell": "売り", "hold": "ホールド"}
-
-
 def render_today_action_panel(ticker_dirs: list[Path]) -> None:
     rows = []
     for ticker_dir in ticker_dirs:
@@ -104,17 +101,22 @@ def render_today_action_panel(ticker_dirs: list[Path]) -> None:
         if not log_path.exists():
             continue
         log = pd.read_csv(log_path)
-        if log.empty:
+        if log.empty or "target_pct" not in log.columns:
+            # 旧スキーマ（action列）のままのデータはクラウド学習の再実行で更新されるまでスキップ
             continue
         latest = log.iloc[-1]
+        prev_shares = float(log.iloc[-2]["shares_held"]) if len(log) >= 2 else 0.0
+        shares_diff = float(latest["shares_held"]) - prev_shares
         rows.append(
             {
                 "ticker": ticker_dir.name,
                 "name": TICKER_NAMES.get(ticker_dir.name, ticker_dir.name),
                 "date": str(latest["date"]),
-                "action": latest["action"],
+                "target_pct": float(latest["target_pct"]),
                 "price": float(latest["price"]),
                 "shares_held": float(latest["shares_held"]),
+                "shares_diff": shares_diff,
+                "trade_amount": shares_diff * float(latest["price"]),
             }
         )
 
@@ -124,22 +126,24 @@ def render_today_action_panel(ticker_dirs: list[Path]) -> None:
     st.header("本日のアクション（championの判断）")
     st.caption(
         "championの判断に従う方針のもと、今日確認すべき内容だけをまとめています。"
-        "参考株数は仮想フォワードテスト（1銘柄20万円）での値です。実際の発注量はご自身の資金に合わせて調整してください。"
+        "推奨配分・参考株数は仮想フォワードテスト（1銘柄20万円）での値です。実際の発注量はご自身の資金に合わせて調整してください。"
     )
 
     for row in rows:
-        cols = st.columns([2, 1.2, 2.3, 1.5])
+        cols = st.columns([2, 1.5, 2.5, 1.5])
         cols[0].markdown(f"**{row['name']}（{row['ticker']}）**")
 
-        label = ACTION_LABELS.get(row["action"], row["action"])
-        if row["action"] == "buy":
-            cols[1].success(label)
-        elif row["action"] == "sell":
-            cols[1].error(label)
+        if row["shares_diff"] > 1e-6:
+            cols[1].success(f"買い増し +{row['shares_diff']:.1f}株")
+        elif row["shares_diff"] < -1e-6:
+            cols[1].error(f"売却 {row['shares_diff']:.1f}株")
         else:
-            cols[1].info(label)
+            cols[1].info("変化なし")
 
-        cols[2].write(f"価格: {row['price']:,.1f}円 ／ 参考株数: {row['shares_held']:.0f}株")
+        cols[2].write(
+            f"目標配分: {row['target_pct']:.0%} ／ 価格: {row['price']:,.1f}円 ／ "
+            f"取引目安: {row['trade_amount']:+,.0f}円"
+        )
 
         quote_url = f"https://finance.yahoo.co.jp/quote/{row['ticker']}"
         cols[3].link_button("価格を確認", quote_url)
@@ -149,7 +153,7 @@ def render_today_action_panel(ticker_dirs: list[Path]) -> None:
     st.divider()
 
 
-def render_forward_test_summary(data_dir: Path) -> None:
+def render_forward_test_summary(data_dir: Path, ticker_dirs: list[Path]) -> None:
     combined_path = data_dir / "_forward_test" / "combined.csv"
     if not combined_path.exists():
         return
@@ -189,6 +193,51 @@ def render_forward_test_summary(data_dir: Path) -> None:
         "- これは過去データへの当てはめではなく、未知のデータに対する仮想運用結果です。"
         "ただし検証期間がまだ短いため、結果が安定するまでは参考程度に留めてください。"
     )
+
+    log_frames = []
+    for ticker_dir in ticker_dirs:
+        log_path = ticker_dir / "forward_test" / "daily_log.csv"
+        if not log_path.exists():
+            continue
+        df = pd.read_csv(log_path)
+        if df.empty or "target_pct" not in df.columns:
+            # 旧スキーマ（action列）のままのデータはクラウド学習の再実行で更新されるまでスキップ
+            continue
+        df["shares_diff"] = df["shares_held"].diff().fillna(df["shares_held"])
+        df["銘柄"] = TICKER_NAMES.get(ticker_dir.name, ticker_dir.name)
+        log_frames.append(df)
+
+    if log_frames:
+        st.subheader("売買ログ（全銘柄・フォワードテスト日次）")
+        all_logs = pd.concat(log_frames, ignore_index=True)
+
+        def format_trade(diff: float) -> str:
+            if diff > 1e-6:
+                return f"+{diff:.2f}株（購入）"
+            if diff < -1e-6:
+                return f"{diff:.2f}株（売却）"
+            return "変化なし"
+
+        all_logs["取引株数"] = all_logs["shares_diff"].map(format_trade)
+        all_logs["目標配分"] = all_logs["target_pct"].map(lambda v: f"{v:.0%}")
+        all_logs = all_logs.rename(
+            columns={
+                "date": "日付",
+                "price": "価格",
+                "cash": "現金",
+                "shares_held": "保有株数",
+                "equity": "評価額",
+            }
+        )
+        all_logs = all_logs[
+            ["日付", "銘柄", "目標配分", "取引株数", "価格", "現金", "保有株数", "評価額"]
+        ]
+        st.dataframe(
+            all_logs.sort_values(["日付", "銘柄"], ascending=[False, True]),
+            use_container_width=True,
+            hide_index=True,
+        )
+
     st.divider()
 
 
@@ -379,21 +428,22 @@ def render_ticker_section(ticker: str, ticker_dir: Path) -> None:
     forward_log_path = ticker_dir / "forward_test" / "daily_log.csv"
     if forward_log_path.exists():
         forward_log = pd.read_csv(forward_log_path)
-        if not forward_log.empty:
+        if not forward_log.empty and "target_pct" in forward_log.columns:
             st.subheader("取引ログ（フォワードテスト・日次）")
-            forward_display = forward_log.rename(
+            forward_display = forward_log.copy()
+            forward_display["目標配分"] = forward_display["target_pct"].map(lambda v: f"{v:.0%}")
+            forward_display = forward_display.rename(
                 columns={
                     "date": "日付",
-                    "action": "判断",
                     "price": "価格",
                     "cash": "現金",
                     "shares_held": "保有株数",
                     "equity": "評価額",
                 }
             )
-            forward_display["判断"] = forward_display["判断"].map(
-                {"buy": "買い", "sell": "売り", "hold": "ホールド"}
-            )
+            forward_display = forward_display[
+                ["日付", "目標配分", "価格", "現金", "保有株数", "評価額"]
+            ]
             st.dataframe(
                 forward_display.sort_values("日付", ascending=False),
                 use_container_width=True,
@@ -423,7 +473,7 @@ def main() -> None:
         return
 
     render_today_action_panel(ticker_dirs)
-    render_forward_test_summary(DATA_DIR)
+    render_forward_test_summary(DATA_DIR, ticker_dirs)
     render_promotion_panel(ticker_dirs)
 
     st.header("詳細（銘柄別・過去データでの検証結果）")

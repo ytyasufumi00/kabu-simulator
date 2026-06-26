@@ -53,7 +53,7 @@ def test_build_observation_reflects_existing_position() -> None:
     window = np.zeros((10, len(FEATURE_COLUMNS)), dtype=np.float32)
     obs = build_observation(window, portfolio, price=2000.0, initial_cash=100_000.0)
 
-    # cash_ratio=0, has_position=1, unrealized_pnl_ratio = (50*2000)/100000 - 1 = 0.0
+    # cash_ratio=0, position_ratio=1.0（全額投資済み）, unrealized_pnl_ratio = (50*2000)/100000 - 1 = 0.0
     assert obs[-3] == 0.0
     assert obs[-2] == 1.0
     assert obs[-1] == 0.0
@@ -70,8 +70,8 @@ def test_build_combined_csv_sums_active_tickers(tmp_path: Path) -> None:
         tmp_path,
         "A.T",
         [
-            {"date": "2026-01-05", "action": "hold", "price": 100, "cash": 0, "shares_held": 2, "equity": 200_000},
-            {"date": "2026-01-06", "action": "hold", "price": 105, "cash": 0, "shares_held": 2, "equity": 210_000},
+            {"date": "2026-01-05", "target_pct": 1.0, "price": 100, "cash": 0, "shares_held": 2, "equity": 200_000},
+            {"date": "2026-01-06", "target_pct": 1.0, "price": 105, "cash": 0, "shares_held": 2, "equity": 210_000},
         ],
     )
     # B.Tは1月6日から開始（新規追加銘柄を想定）
@@ -79,7 +79,7 @@ def test_build_combined_csv_sums_active_tickers(tmp_path: Path) -> None:
         tmp_path,
         "B.T",
         [
-            {"date": "2026-01-06", "action": "hold", "price": 50, "cash": 0, "shares_held": 4, "equity": 200_000},
+            {"date": "2026-01-06", "target_pct": 1.0, "price": 50, "cash": 0, "shares_held": 4, "equity": 200_000},
         ],
     )
 

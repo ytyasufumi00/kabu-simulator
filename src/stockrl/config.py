@@ -25,6 +25,10 @@ class EnvConfig:
     initial_cash: float
     commission_pct: float
     slippage_bps: float
+    min_trade_pct: float = 0.05
+    max_position_pct: float = 0.9
+    target_volatility: float = 0.02
+    stop_loss_drawdown_pct: float = 0.15
 
 
 @dataclass(frozen=True)
@@ -89,6 +93,10 @@ def load_settings(path: Path = SETTINGS_PATH) -> Settings:
             initial_cash=float(env_raw["initial_cash"]),
             commission_pct=float(env_raw["commission_pct"]),
             slippage_bps=float(env_raw["slippage_bps"]),
+            min_trade_pct=float(env_raw.get("min_trade_pct", 0.05)),
+            max_position_pct=float(env_raw.get("max_position_pct", 0.9)),
+            target_volatility=float(env_raw.get("target_volatility", 0.02)),
+            stop_loss_drawdown_pct=float(env_raw.get("stop_loss_drawdown_pct", 0.15)),
         ),
         ppo=PPOConfig(
             timesteps_per_iteration=ppo_raw["timesteps_per_iteration"],

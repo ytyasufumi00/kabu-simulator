@@ -18,16 +18,25 @@ class BacktestResult:
 
 
 def _round_trip_pnls(trades: list[Trade]) -> list[float]:
-    pnls = []
-    open_trade: Trade | None = None
+    """各売却について、その時点までの平均取得コストとの差額を実現損益として記録する。
+
+    部分売買（目標配分への都度リバランス）では、1回の売却に複数回の買い増しが
+    対応することがあるため、単純な「直前の買いと対」ではなく加重平均コストで計算する。
+    """
+    pnls: list[float] = []
+    open_shares = 0.0
+    open_cost = 0.0  # 現在保有株の取得コスト合計（手数料込み）
     for t in trades:
         if t.action == "buy":
-            open_trade = t
-        elif t.action == "sell" and open_trade is not None:
-            cost_basis = open_trade.shares * open_trade.price + open_trade.cost
+            open_shares += t.shares
+            open_cost += t.shares * t.price + t.cost
+        elif t.action == "sell" and open_shares > 0:
+            avg_cost_per_share = open_cost / open_shares
+            sold_cost_basis = avg_cost_per_share * t.shares
             proceeds = t.shares * t.price - t.cost
-            pnls.append(proceeds - cost_basis)
-            open_trade = None
+            pnls.append(proceeds - sold_cost_basis)
+            open_shares -= t.shares
+            open_cost -= sold_cost_basis
     return pnls
 
 
@@ -35,6 +44,7 @@ def run_backtest(env: SingleAssetTradingEnv, model=None) -> BacktestResult:
     """学習済みモデル（SB3 PPO等）でテスト環境を1エピソード実行する。
 
     model=None の場合はランダムエージェント（健全性確認用）。
+    行動は目標配分（0.0〜1.0の連続値）。
     """
     obs, _ = env.reset()
     portfolio = env.unwrapped.portfolio
@@ -46,13 +56,12 @@ def run_backtest(env: SingleAssetTradingEnv, model=None) -> BacktestResult:
             action = env.action_space.sample()
         else:
             action, _ = model.predict(obs, deterministic=True)
-            action = int(action)
         obs, _reward, terminated, _truncated, info = env.step(action)
         equities.append(info["equity"])
-        actions.append(action)
+        actions.append(info["target_pct"])
 
     equity_curve = pd.Series(equities, name="equity")
-    actions_series = pd.Series(actions, name="action")
+    actions_series = pd.Series(actions, name="target_pct")
     trades = list(portfolio.trades)
     return BacktestResult(
         equity_curve=equity_curve,

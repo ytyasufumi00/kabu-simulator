@@ -22,6 +22,10 @@ env:
   initial_cash: 1000000.0 # 仮想元本（円）
   commission_pct: 0.001   # 取引コスト（往復ではなく1回あたり）
   slippage_bps: 0.0       # 将来拡張用フック（v1は0）
+  min_trade_pct: 0.05     # 目標配分との差がこの割合未満なら取引しない（手数料の無駄打ち防止）
+  max_position_pct: 0.9   # 最大保有比率（常に最低10%は現金で保持）
+  target_volatility: 0.02 # ボラティリティターゲティングの目標日次ボラティリティ
+  stop_loss_drawdown_pct: 0.15 # 直近ピークからの最大許容ドローダウン（超えたら強制的に配分0）
 
 ppo:
   timesteps_per_iteration: 50000
