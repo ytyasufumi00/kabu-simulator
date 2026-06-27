@@ -4,7 +4,9 @@ walk_forward:
   test_period_days: 120    # 約6ヶ月分
 
 # 探索フェーズ用の学習タイムステップ（growth_loopの本採用後の継続学習用timestepsとは別）
-experiment_timesteps: 20000
+# 連続値の配分判断（行動空間Box化＋リスクオーバーレイ）は離散3択より学習が難しいため、
+# 20000では学習不足で旧championに勝てなかった（2026-06-26の実測）ことを受けて増量
+experiment_timesteps: 60000
 
 # PPOロールアウト収集の並列環境数。総timesteps（学習の精度）には影響せず、
 # 壁時計時間のみが短縮される。クラウド実行時はVMのvCPU数に合わせて設定する。
