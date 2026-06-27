@@ -39,23 +39,20 @@ jobs:
       - uses: google-github-actions/setup-gcloud@v2
 
       - id: launch
-        name: Launch training VM
+        name: Launch Spot training VM
         run: |
           INSTANCE_NAME="kabu-simulator-trainer-$(date +%s)"
           # TRAIN_CMDはカンマ・引用符・&&等を含み得るため、--metadataのカンマ区切り
           # パースとは衝突する。ファイル経由（--metadata-from-file）で渡して回避する。
           printf '%s' "${{ inputs.train_command }}" > /tmp/train_cmd.txt
           PROJECT_NUMBER=$(gcloud projects describe "${{ secrets.GCP_PROJECT_ID }}" --format='value(projectNumber)')
-          # 2026-06-26: 連続配分への移行検証中、Spot VMのプリエンプションが3回中2回発生し
-          # 学習が無駄になったため、一時的にSTANDARD（オンデマンド）に切り戻す。
-          # 安定して動くようになったらSPOTに戻してコストを抑える。
           gcloud compute instances create "$INSTANCE_NAME" \
             --project="${{ secrets.GCP_PROJECT_ID }}" \
             --zone=asia-northeast1-a \
             --machine-type="${{ inputs.machine_type }}" \
             --image-family=debian-12 \
             --image-project=debian-cloud \
-            --provisioning-model=STANDARD \
+            --provisioning-model=SPOT \
             --instance-termination-action=DELETE \
             --max-run-duration="${{ inputs.max_run_duration }}" \
             --service-account="kabu-simulator-trainer@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
