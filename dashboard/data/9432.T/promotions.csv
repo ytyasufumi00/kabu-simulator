@@ -17,3 +17,4 @@ timestamp,variant_name,win_ratio,margin,promoted,reason
 2026-06-28T02:01:32,risk_adjusted_reward,0.0,-0.5260216876601296,False,"win_ratio=0.00 (閾値0.60), margin=-0.5260 (閾値0.0500)"
 2026-06-28T02:57:46,risk_adjusted_reward,0.0,-0.7744713314739511,False,"win_ratio=0.00 (閾値0.60), margin=-0.7745 (閾値0.0500)"
 2026-06-28T03:58:55,risk_adjusted_reward,0.0,-0.6483810804859034,False,"win_ratio=0.00 (閾値0.60), margin=-0.6484 (閾値0.0500)"
+2026-06-28T05:02:48,risk_adjusted_reward,0.6666666666666666,-0.4954793059648055,False,"win_ratio=0.67 (閾値0.60), margin=-0.4955 (閾値0.0500)"
