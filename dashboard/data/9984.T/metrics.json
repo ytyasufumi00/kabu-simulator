@@ -1,9 +1,9 @@
 {
-  "cumulative_return": 0.13609584961472887,
-  "cagr": 0.3395245146895265,
-  "sharpe_ratio": 3.412418942603613,
-  "max_drawdown": -0.01668298006315816,
-  "win_rate": 0.8,
-  "benchmark_cumulative_return": 0.4402958614492263,
-  "benchmark_sharpe_ratio": 2.103399452544749
+  "cumulative_return": 0.41069810691396014,
+  "cagr": 1.1995807006340327,
+  "sharpe_ratio": 2.9525552997947475,
+  "max_drawdown": -0.03107992486240918,
+  "win_rate": 0.72,
+  "benchmark_cumulative_return": 0.44029582016527313,
+  "benchmark_sharpe_ratio": 2.1033974345215696
 }
