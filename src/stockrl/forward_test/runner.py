@@ -115,30 +115,35 @@ def run_daily_step(
     obs = build_observation(window_features, portfolio, price, per_ticker_capital)
 
     model = PPO.load(str(forward_model_path))
-    if not isinstance(model.action_space, spaces.Box):
-        raise RuntimeError(
-            f"{ticker}: forward_championが旧形式（離散行動空間）のままです。"
-            "クラウド学習を再実行して連続配分対応のchampionを作り直してください。"
-        )
     raw_action, _ = model.predict(obs, deterministic=True)
-    raw_target_pct = float(raw_action.reshape(-1)[0])
-
     equity_before = portfolio.equity(price)
     peak_equity = max(state.peak_equity, equity_before)
-    risk_limits = RiskLimits(
-        max_position_pct=settings.env.max_position_pct,
-        target_volatility=settings.env.target_volatility,
-        stop_loss_drawdown_pct=settings.env.stop_loss_drawdown_pct,
-    )
-    target_pct = apply_risk_overlay(
-        raw_target_pct,
-        volatility=volatility,
-        peak_equity=peak_equity,
-        current_equity=equity_before,
-        limits=risk_limits,
-    )
 
-    portfolio.rebalance_to(0, target_pct, price)
+    if isinstance(model.action_space, spaces.Box):
+        raw_target_pct = float(raw_action.reshape(-1)[0])
+        risk_limits = RiskLimits(
+            max_position_pct=settings.env.max_position_pct,
+            target_volatility=settings.env.target_volatility,
+            stop_loss_drawdown_pct=settings.env.stop_loss_drawdown_pct,
+        )
+        target_pct = apply_risk_overlay(
+            raw_target_pct,
+            volatility=volatility,
+            peak_equity=peak_equity,
+            current_equity=equity_before,
+            limits=risk_limits,
+        )
+        portfolio.rebalance_to(0, target_pct, price)
+    else:
+        # 旧形式（離散行動、全額買い/全額売り）のchampionがまだ残っている銘柄向けの後方互換パス。
+        # 学習時にリスクオーバーレイを適用していないため、ここでも適用しない（train/serve skew防止）。
+        action = int(raw_action)
+        if action == 1:  # BUY
+            portfolio.rebalance_to(0, 1.0, price)
+        elif action == 2:  # SELL
+            portfolio.rebalance_to(0, 0.0, price)
+        target_pct = portfolio.position_pct(price)
+
     equity = portfolio.equity(price)
     peak_equity = max(peak_equity, equity)
 
