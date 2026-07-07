@@ -138,23 +138,23 @@ def render_today_action_panel(ticker_dirs: list[Path]) -> None:
     )
 
     for row in rows:
-        cols = st.columns([2, 1.5, 2.5, 1.5])
-        cols[0].markdown(f"**{row['name']}（{row['ticker']}）**")
+        with st.container(border=True):
+            st.markdown(f"**{row['name']}（{row['ticker']}）**")
 
-        if row["shares_diff"] > 1e-6:
-            cols[1].success(f"買い増し +{row['shares_diff']:.1f}株")
-        elif row["shares_diff"] < -1e-6:
-            cols[1].error(f"売却 {row['shares_diff']:.1f}株")
-        else:
-            cols[1].info("変化なし")
+            if row["shares_diff"] > 1e-6:
+                st.success(f"買い増し +{row['shares_diff']:.1f}株")
+            elif row["shares_diff"] < -1e-6:
+                st.error(f"売却 {row['shares_diff']:.1f}株")
+            else:
+                st.info("変化なし")
 
-        cols[2].write(
-            f"目標配分: {row['target_pct']:.0%} ／ 価格: {row['price']:,.1f}円 ／ "
-            f"取引目安: {row['trade_amount']:+,.0f}円"
-        )
+            st.write(
+                f"目標配分: {row['target_pct']:.0%} ／ 価格: {row['price']:,.1f}円 ／ "
+                f"取引目安: {row['trade_amount']:+,.0f}円"
+            )
 
-        quote_url = f"https://finance.yahoo.co.jp/quote/{row['ticker']}"
-        cols[3].link_button("価格を確認", quote_url)
+            quote_url = f"https://finance.yahoo.co.jp/quote/{row['ticker']}"
+            st.link_button("価格を確認", quote_url)
 
     latest_date = max(row["date"] for row in rows)
     st.caption(f"判断日: {latest_date}（championは月初に固定したモデルをそのまま使用）")
