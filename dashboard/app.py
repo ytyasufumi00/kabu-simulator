@@ -142,14 +142,14 @@ def render_today_action_panel(ticker_dirs: list[Path]) -> None:
             st.markdown(f"**{row['name']}（{row['ticker']}）**")
 
             if row["shares_diff"] > 1e-6:
-                st.success(f"買い増し +{row['shares_diff']:.1f}株")
+                st.success(f"買い増し +{row['shares_diff']:,.0f}株")
             elif row["shares_diff"] < -1e-6:
-                st.error(f"売却 {row['shares_diff']:.1f}株")
+                st.error(f"売却 {row['shares_diff']:,.0f}株")
             else:
                 st.info("変化なし")
 
             st.write(
-                f"目標配分: {row['target_pct']:.0%} ／ 価格: {row['price']:,.1f}円 ／ "
+                f"目標配分: {row['target_pct']:.0%} ／ 価格: {row['price']:,.0f}円 ／ "
                 f"取引目安: {row['trade_amount']:+,.0f}円"
             )
 
@@ -221,9 +221,9 @@ def render_forward_test_summary(data_dir: Path, ticker_dirs: list[Path]) -> None
 
         def format_trade(diff: float) -> str:
             if diff > 1e-6:
-                return f"+{diff:.2f}株（購入）"
+                return f"+{diff:,.0f}株（購入）"
             if diff < -1e-6:
-                return f"{diff:.2f}株（売却）"
+                return f"{diff:,.0f}株（売却）"
             return "変化なし"
 
         all_logs["取引株数"] = all_logs["shares_diff"].map(format_trade)
@@ -244,6 +244,12 @@ def render_forward_test_summary(data_dir: Path, ticker_dirs: list[Path]) -> None
             all_logs.sort_values(["日付", "銘柄"], ascending=[False, True]),
             use_container_width=True,
             hide_index=True,
+            column_config={
+                "価格": st.column_config.NumberColumn(format="%.0f円"),
+                "現金": st.column_config.NumberColumn(format="%.0f円"),
+                "保有株数": st.column_config.NumberColumn(format="%.0f株"),
+                "評価額": st.column_config.NumberColumn(format="%.0f円"),
+            },
         )
 
     st.divider()
@@ -431,6 +437,11 @@ def render_ticker_section(ticker: str, ticker_dir: Path) -> None:
                 trades_display.sort_values("ステップ", ascending=False),
                 use_container_width=True,
                 hide_index=True,
+                column_config={
+                    "価格": st.column_config.NumberColumn(format="%.0f円"),
+                    "株数": st.column_config.NumberColumn(format="%.0f株"),
+                    "手数料": st.column_config.NumberColumn(format="%.0f円"),
+                },
             )
 
     forward_log_path = ticker_dir / "forward_test" / "daily_log.csv"
@@ -446,9 +457,9 @@ def render_ticker_section(ticker: str, ticker_dir: Path) -> None:
                 forward_display["shares_held"]
             )
             forward_display["取引株数"] = shares_diff.map(
-                lambda diff: f"+{diff:.2f}株（購入）"
+                lambda diff: f"+{diff:,.0f}株（購入）"
                 if diff > 1e-6
-                else (f"{diff:.2f}株（売却）" if diff < -1e-6 else "変化なし")
+                else (f"{diff:,.0f}株（売却）" if diff < -1e-6 else "変化なし")
             )
             forward_display["目標配分"] = forward_display["target_pct"].map(format_target_pct)
             forward_display = forward_display.rename(
@@ -467,6 +478,12 @@ def render_ticker_section(ticker: str, ticker_dir: Path) -> None:
                 forward_display.sort_values("日付", ascending=False),
                 use_container_width=True,
                 hide_index=True,
+                column_config={
+                    "価格": st.column_config.NumberColumn(format="%.0f円"),
+                    "現金": st.column_config.NumberColumn(format="%.0f円"),
+                    "保有株数": st.column_config.NumberColumn(format="%.0f株"),
+                    "評価額": st.column_config.NumberColumn(format="%.0f円"),
+                },
             )
 
     st.divider()
