@@ -31,6 +31,11 @@ METRIC_LABELS = {
 }
 
 
+def format_target_pct(v: float) -> str:
+    """target_pctを%表示にする。離散行動時代の記録（数値化できない値）は明示的にその旨を出す。"""
+    return "-（旧記録形式）" if pd.isna(v) else f"{v:.0%}"
+
+
 def load_ticker_data(ticker_dir: Path) -> tuple[dict, pd.DataFrame | None]:
     metrics_path = ticker_dir / "metrics.json"
     history_path = ticker_dir / "history.csv"
@@ -102,9 +107,12 @@ def render_today_action_panel(ticker_dirs: list[Path]) -> None:
             continue
         log = pd.read_csv(log_path)
         if log.empty or "target_pct" not in log.columns:
-            # 旧スキーマ（action列）のままのデータはクラウド学習の再実行で更新されるまでスキップ
             continue
+        log["target_pct"] = pd.to_numeric(log["target_pct"], errors="coerce")
         latest = log.iloc[-1]
+        if pd.isna(latest["target_pct"]):
+            # 最新日がまだ離散行動時代の記録（新形式への移行待ち）の場合はスキップ
+            continue
         prev_shares = float(log.iloc[-2]["shares_held"]) if len(log) >= 2 else 0.0
         shares_diff = float(latest["shares_held"]) - prev_shares
         rows.append(
@@ -201,8 +209,8 @@ def render_forward_test_summary(data_dir: Path, ticker_dirs: list[Path]) -> None
             continue
         df = pd.read_csv(log_path)
         if df.empty or "target_pct" not in df.columns:
-            # 旧スキーマ（action列）のままのデータはクラウド学習の再実行で更新されるまでスキップ
             continue
+        df["target_pct"] = pd.to_numeric(df["target_pct"], errors="coerce")
         df["shares_diff"] = df["shares_held"].diff().fillna(df["shares_held"])
         df["銘柄"] = TICKER_NAMES.get(ticker_dir.name, ticker_dir.name)
         log_frames.append(df)
@@ -219,7 +227,7 @@ def render_forward_test_summary(data_dir: Path, ticker_dirs: list[Path]) -> None
             return "変化なし"
 
         all_logs["取引株数"] = all_logs["shares_diff"].map(format_trade)
-        all_logs["目標配分"] = all_logs["target_pct"].map(lambda v: f"{v:.0%}")
+        all_logs["目標配分"] = all_logs["target_pct"].map(format_target_pct)
         all_logs = all_logs.rename(
             columns={
                 "date": "日付",
@@ -431,7 +439,18 @@ def render_ticker_section(ticker: str, ticker_dir: Path) -> None:
         if not forward_log.empty and "target_pct" in forward_log.columns:
             st.subheader("取引ログ（フォワードテスト・日次）")
             forward_display = forward_log.copy()
-            forward_display["目標配分"] = forward_display["target_pct"].map(lambda v: f"{v:.0%}")
+            forward_display["target_pct"] = pd.to_numeric(
+                forward_display["target_pct"], errors="coerce"
+            )
+            shares_diff = forward_display["shares_held"].diff().fillna(
+                forward_display["shares_held"]
+            )
+            forward_display["取引株数"] = shares_diff.map(
+                lambda diff: f"+{diff:.2f}株（購入）"
+                if diff > 1e-6
+                else (f"{diff:.2f}株（売却）" if diff < -1e-6 else "変化なし")
+            )
+            forward_display["目標配分"] = forward_display["target_pct"].map(format_target_pct)
             forward_display = forward_display.rename(
                 columns={
                     "date": "日付",
@@ -442,7 +461,7 @@ def render_ticker_section(ticker: str, ticker_dir: Path) -> None:
                 }
             )
             forward_display = forward_display[
-                ["日付", "目標配分", "価格", "現金", "保有株数", "評価額"]
+                ["日付", "目標配分", "取引株数", "価格", "現金", "保有株数", "評価額"]
             ]
             st.dataframe(
                 forward_display.sort_values("日付", ascending=False),
